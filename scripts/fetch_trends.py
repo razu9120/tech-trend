@@ -7,8 +7,9 @@ import urllib.error
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-TODAY = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-SEVEN_DAYS_AGO = (datetime.now(timezone.utc) - timedelta(days=7)).strftime("%Y-%m-%d")
+JST = timezone(timedelta(hours=9))
+TODAY = datetime.now(JST).strftime("%Y-%m-%d")
+SEVEN_DAYS_AGO = (datetime.now(JST) - timedelta(days=7)).strftime("%Y-%m-%d")
 BASE_DIR = Path(__file__).parent.parent
 
 HEADERS = {

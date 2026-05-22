@@ -1,0 +1,34 @@
+name: Fetch Tech Trend
+
+on:
+  schedule:
+    - cron: '0 22 * * *'   # UTC 22:00 = JST 07:00
+  workflow_dispatch:         # 手動実行用
+
+permissions:
+  contents: write
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Fetch trends
+        run: python3 scripts/fetch_trends.py
+
+      - name: Commit and push
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --quiet && echo "No changes." || (
+            git commit -m "auto: fetch tech-trend $(date -u +%Y-%m-%d)" &&
+            git push
+          )

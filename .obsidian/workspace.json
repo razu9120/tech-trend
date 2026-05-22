@@ -177,5 +177,22 @@
     }
   },
   "active": "a214e54d5e11b587",
-  "lastOpenFiles": []
+  "lastOpenFiles": [
+    "daily/2026-05-22.md",
+    "topics/github-trending/2026-05-22.md",
+    "topics/claude-code/2026-05-22.md",
+    "topics/nextjs/2026-05-22.md",
+    "topics/react/2026-05-22.md",
+    "CLAUDE.md",
+    "scripts/fetch_trends.py",
+    "scripts",
+    "topics/react",
+    "topics/nextjs",
+    "topics/github-trending",
+    "topics/claude-code",
+    "topics",
+    "daily",
+    "DESIGN.md.tmp.66920.01126e11b73f",
+    "DESIGN.md"
+  ]
 }

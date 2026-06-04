@@ -2,6 +2,7 @@
 """Fetch tech trend data and write Obsidian notes. No external dependencies."""
 
 import json
+import os
 import urllib.request
 import urllib.error
 from datetime import datetime, timedelta, timezone
@@ -17,6 +18,9 @@ HEADERS = {
     "X-GitHub-Api-Version": "2022-11-28",
     "User-Agent": "tech-trend-bot/1.0",
 }
+_gh_token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN")
+if _gh_token:
+    HEADERS["Authorization"] = f"Bearer {_gh_token}"
 
 
 def gh_get(url: str):

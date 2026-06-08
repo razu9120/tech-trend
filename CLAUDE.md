@@ -10,6 +10,9 @@ topics/react/YYYY-MM-DD.md
 topics/nextjs/YYYY-MM-DD.md
 topics/claude-code/YYYY-MM-DD.md
 topics/github-trending/YYYY-MM-DD.md
+topics/zenn/YYYY-MM-DD.md
+topics/qiita/YYYY-MM-DD.md
+topics/note/YYYY-MM-DD.md
 ```
 
 ## ノートフォーマット規則

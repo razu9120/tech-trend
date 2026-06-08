@@ -1,6 +1,6 @@
 ---
 name: fetch-all-trends
-description: React / Next.js / Claude Code / GitHub Trending の最新情報を手動取得して Obsidian ノートを生成し git push する。
+description: React / Next.js / Claude Code / GitHub Trending / Zenn / Qiita / note の最新情報を手動取得して Obsidian ノートを生成し git push する。
 disable-model-invocation: true
 allowed-tools: Bash(python3 *) Bash(git *)
 ---

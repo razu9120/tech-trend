@@ -3,6 +3,7 @@
 
 import json
 import os
+import urllib.parse
 import urllib.request
 import urllib.error
 from datetime import datetime, timedelta, timezone
@@ -73,6 +74,72 @@ def fetch_zenn_trending(count: int = 20) -> list[dict]:
             "published_at": (item.get("published_at") or "")[:10],
             "topics": [t.get("display_name", "") for t in (item.get("topics") or [])],
         })
+    return results
+
+
+def fetch_qiita_trending(count: int = 20) -> list[dict]:
+    query = f"stocks:>20 created:>{SEVEN_DAYS_AGO}"
+    url = (
+        "https://qiita.com/api/v2/items"
+        f"?per_page={count}&query={urllib.parse.quote(query)}"
+    )
+    headers = {"User-Agent": "tech-trend-bot/1.0"}
+    token = os.environ.get("QIITA_TOKEN")
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    req = urllib.request.Request(url, headers=headers)
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            data = json.loads(resp.read().decode())
+    except urllib.error.URLError as e:
+        print(f"    skipped ({e})")
+        return []
+    results = []
+    for item in data:
+        results.append({
+            "title": (item.get("title") or "")[:60],
+            "url": item.get("url", ""),
+            "likes_count": item.get("likes_count", 0),
+            "stocks_count": item.get("stocks_count", 0),
+            "published_at": (item.get("created_at") or "")[:10],
+            "tags": [t.get("name", "") for t in (item.get("tags") or [])],
+        })
+    return results
+
+
+def fetch_note_trending(keywords: list[str] | None = None, count: int = 10) -> list[dict]:
+    keywords = keywords or ["React", "Next.js", "プログラミング"]
+    results: list[dict] = []
+    seen: set[str] = set()
+    for kw in keywords:
+        url = (
+            "https://note.com/api/v3/searches"
+            f"?context=note&q={urllib.parse.quote(kw)}&size={count}&sort=popular"
+        )
+        req = urllib.request.Request(url, headers={"User-Agent": "tech-trend-bot/1.0"})
+        try:
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                data = json.loads(resp.read().decode())
+        except urllib.error.URLError as e:
+            print(f"    skipped '{kw}' ({e})")
+            continue
+        notes = (((data.get("data") or {}).get("notes") or {}).get("contents")) or []
+        for n in notes:
+            key = n.get("key", "")
+            urlname = (n.get("user") or {}).get("urlname", "")
+            note_url = f"https://note.com/{urlname}/n/{key}" if urlname and key else ""
+            published_at = (n.get("publish_at") or "")[:10]
+            if not note_url or note_url in seen or published_at < SEVEN_DAYS_AGO:
+                continue
+            seen.add(note_url)
+            results.append({
+                "title": (n.get("name") or "")[:60],
+                "url": note_url,
+                "like_count": n.get("like_count", 0),
+                "published_at": published_at,
+                "keyword": kw,
+            })
+    results.sort(key=lambda r: r["like_count"], reverse=True)
     return results
 
 
@@ -175,12 +242,63 @@ def zenn_note(articles: list[dict]) -> str:
     return "\n".join(lines)
 
 
+def qiita_note(articles: list[dict]) -> str:
+    lines = [
+        "---",
+        f"date: {TODAY}",
+        "topic: qiita",
+        "tags: [tech-trend, auto-generated]",
+        "---",
+        "",
+        f"# Qiita 人気記事（週間） - {TODAY}",
+        "",
+        "過去 7 日間のストック数上位記事。",
+        "",
+        "| # | 記事 | 👍 LGTM | タグ | 公開日 |",
+        "|---:|---|---:|---|---|",
+    ]
+    for i, a in enumerate(articles, 1):
+        tags = ", ".join(a["tags"][:3]) if a["tags"] else "—"
+        title = a["title"].replace("|", "｜")
+        lines.append(
+            f"| {i} | [{title}]({a['url']}) | {a['likes_count']:,} | {tags} | {a['published_at']} |"
+        )
+    lines.append("")
+    return "\n".join(lines)
+
+
+def note_note(articles: list[dict]) -> str:
+    lines = [
+        "---",
+        f"date: {TODAY}",
+        "topic: note",
+        "tags: [tech-trend, auto-generated]",
+        "---",
+        "",
+        f"# note 技術記事（人気） - {TODAY}",
+        "",
+        "技術キーワードで検索した人気記事。",
+        "",
+        "| # | 記事 | ❤️ | キーワード | 公開日 |",
+        "|---:|---|---:|---|---|",
+    ]
+    for i, a in enumerate(articles, 1):
+        title = a["title"].replace("|", "｜")
+        lines.append(
+            f"| {i} | [{title}]({a['url']}) | {a['like_count']:,} | {a['keyword']} | {a['published_at']} |"
+        )
+    lines.append("")
+    return "\n".join(lines)
+
+
 def daily_note(
     react: list[dict],
     nextjs: list[dict],
     claude_code: list[dict],
     trending: list[dict],
     zenn: list[dict],
+    qiita: list[dict],
+    note: list[dict],
 ) -> str:
     def recent(releases: list[dict], n: int = 3) -> list[dict]:
         return [r for r in releases if not r["prerelease"]][:n] or releases[:n]
@@ -223,6 +341,20 @@ def daily_note(
     for a in zenn[:5]:
         emoji = a["emoji"] + " " if a["emoji"] else ""
         lines.append(f"- [{emoji}{a['title']}]({a['url']}) ❤️{a['liked_count']:,}")
+    lines += [
+        "",
+        "## Qiita 人気記事 Top 5（週間）",
+        "",
+    ]
+    for a in qiita[:5]:
+        lines.append(f"- [{a['title']}]({a['url']}) 👍{a['likes_count']:,}")
+    lines += [
+        "",
+        "## note 技術記事 Top 5",
+        "",
+    ]
+    for a in note[:5]:
+        lines.append(f"- [{a['title']}]({a['url']}) ❤️{a['like_count']:,}")
     lines.append("")
     return "\n".join(lines)
 
@@ -249,12 +381,20 @@ def main() -> None:
     print("  Zenn 人気記事...")
     zenn = fetch_zenn_trending()
 
+    print("  Qiita 人気記事...")
+    qiita = fetch_qiita_trending()
+
+    print("  note 技術記事...")
+    note = fetch_note_trending()
+
     write_note(BASE_DIR / "topics" / "react" / f"{TODAY}.md", releases_note("react", "React", react))
     write_note(BASE_DIR / "topics" / "nextjs" / f"{TODAY}.md", releases_note("nextjs", "Next.js", nextjs))
     write_note(BASE_DIR / "topics" / "claude-code" / f"{TODAY}.md", releases_note("claude-code", "Claude Code", claude_code))
     write_note(BASE_DIR / "topics" / "github-trending" / f"{TODAY}.md", trending_note(trending))
     write_note(BASE_DIR / "topics" / "zenn" / f"{TODAY}.md", zenn_note(zenn))
-    write_note(BASE_DIR / "daily" / f"{TODAY}.md", daily_note(react, nextjs, claude_code, trending, zenn))
+    write_note(BASE_DIR / "topics" / "qiita" / f"{TODAY}.md", qiita_note(qiita))
+    write_note(BASE_DIR / "topics" / "note" / f"{TODAY}.md", note_note(note))
+    write_note(BASE_DIR / "daily" / f"{TODAY}.md", daily_note(react, nextjs, claude_code, trending, zenn, qiita, note))
 
     print("Done.")
 

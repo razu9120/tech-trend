@@ -228,7 +228,7 @@ Zenn は `scripts/fetch_trends.py` 内の `fetch_zenn_trending()` / `zenn_note()
 | ソース | エンドポイント（キー不要） | トレンド近似 | 備考 |
 |---|---|---|---|
 | Qiita | `GET https://qiita.com/api/v2/items?query=stocks:>N+created:>YYYY-MM-DD&per_page=20` | 過去7日 × stocks/LGTM 数 | 公式 API。無認証 60 req/h、`QIITA_TOKEN` 設定で 1000 req/h |
-| note | `GET https://note.com/api/v3/searches?context=note&q=KEYWORD&size=20&sort=popular` | 技術キーワード × 人気順 | 非公式 API。変更で壊れ得るため要 try/except・キーワード絞り込み |
+| note | Google News RSS `https://news.google.com/rss/search?q=site:note.com+KEYWORD&hl=ja&gl=JP` → 各リンクを実 URL に解決 | 技術キーワード × 直近順 | note.com API は Cloudflare が GitHub Actions の IP を 403 で遮断するため CI から到達不可。Google News（IP 制限なし）経由で取得し、リダイレクト URL を実 note.com URL に解決する（短縮 URL 禁止ルール対応） |
 
 ### 7-1. Qiita 追加（✅ 公式 API・確実）
 
@@ -243,15 +243,25 @@ Zenn は `scripts/fetch_trends.py` 内の `fetch_zenn_trending()` / `zenn_note()
 - [x] `daily_note()` に「Qiita 人気記事 Top 5（週間）」ブロックを追加し、引数に `qiita` を追加する
 - [x] `main()` で `fetch_qiita_trending()` を呼び、`topics/qiita/{TODAY}.md` を書き出す
 
-### 7-2. note 追加（⚠️ 非公式 API・要フォールバック）
+### 7-2. note 追加（⚠️ Google News 経由・CI 対応）
 
-- [x] `fetch_note_trending(keywords, count)` を実装する
-  - 技術キーワード（例: `React`, `Next.js`, `プログラミング`）で検索し人気順に取得
-  - `urllib.error.URLError` / JSON 形状変化を捕捉し、失敗時は `[]` を返してスキップ
-  - 抽出フィールド: `title` / `url`(`https://note.com/{urlname}/n/{key}`) / `like_count` / `published_at` / `user`
-  - 重複記事を `url` で除去する
+> **重要な制約：** note.com は Cloudflare 配下で GitHub Actions のデータセンター IP を
+> 403 で遮断する（ブラウザ風ヘッダーでも回避不可・IP レピュテーション遮断）。
+> ローカル（家庭用 IP）では note.com API が動くが CI では使えないため、
+> CI でも動く Google News RSS 経由に切り替えた。
+
+- [x] `fetch_note_trending(keywords, per_keyword)` を実装する
+  - Google News RSS `q=site:note.com {kw}` で技術キーワード（`React`/`Next.js`/`プログラミング`）を検索
+  - `<pubDate>` で過去 7 日にフィルタしてから URL 解決（解決は 2 リクエストのため件数を絞る）
+  - `_resolve_gnews_url()` で Google リダイレクト URL を実 note.com URL に解決
+    （記事ページの `data-n-a-sg`/`data-n-a-ts` を使い `batchexecute` で逆引き）
+  - `urllib.error.URLError` を全段で捕捉し、失敗時はスキップ（全体は落ちない）
+  - 重複記事を実 URL で除去し、公開日降順でソート
+  - 抽出フィールド: `title`（` - note` 接尾辞除去）/ `url`（実 note.com URL）/ `published_at` / `keyword`
+  - **トレードオフ：** いいね数は取得不可（Google News に含まれない）。`site:` 検索のため
+    関連度が粗く、キーワードを含むだけの非技術記事が混ざることがある
 - [x] `note_note(articles)` レンダラーを実装する（frontmatter `topic: note`）
-  - 見出し `# note 技術記事（人気） - {TODAY}`、列: `# | 記事 | ❤️ | 公開日`
+  - 見出し `# note 技術記事 - {TODAY}`、列: `# | 記事 | キーワード | 公開日`
 - [x] `daily_note()` に「note 技術記事 Top 5」ブロックを追加し、引数に `note` を追加する
 - [x] `main()` で `fetch_note_trending()` を呼び、`topics/note/{TODAY}.md` を書き出す
 

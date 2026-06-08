@@ -3,10 +3,12 @@
 
 import json
 import os
+import re
 import urllib.parse
 import urllib.request
 import urllib.error
 from datetime import datetime, timedelta, timezone
+from email.utils import parsedate_to_datetime
 from pathlib import Path
 
 JST = timezone(timedelta(hours=9))
@@ -107,52 +109,110 @@ def fetch_qiita_trending(count: int = 20) -> list[dict]:
     return results
 
 
-def fetch_note_trending(keywords: list[str] | None = None, count: int = 10) -> list[dict]:
+# note.com itself sits behind Cloudflare and hard-blocks datacenter IPs (e.g.
+# GitHub Actions runners), so its API can't be reached from CI. Instead we query
+# Google News (not IP-blocked) for note.com articles, then resolve each Google
+# redirect link back to the real note.com URL — the project rule forbids
+# redirect/short URLs in notes.
+_BROWSER_UA = (
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+)
+_GNEWS_BATCH = "https://news.google.com/_/DotsSplashUi/data/batchexecute"
+_NOTE_URL_RE = re.compile(r"https://note\.com/[A-Za-z0-9_\-]+/n/[A-Za-z0-9]+")
+
+
+def _resolve_gnews_url(link: str) -> str:
+    """Resolve a Google News redirect link to the underlying note.com URL.
+
+    The modern Google News link encodes the target in a protobuf id that must be
+    exchanged via Google's batchexecute endpoint, using a signature/timestamp
+    embedded in the article page. Returns "" on any failure.
+    """
+    try:
+        art_id = link.split("/articles/")[1].split("?")[0]
+    except IndexError:
+        return ""
+    headers = {"User-Agent": _BROWSER_UA}
+    try:
+        req = urllib.request.Request(link, headers=headers)
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            page = resp.read().decode("utf-8", "replace")
+        sg = re.search(r'data-n-a-sg="([^"]+)"', page)
+        ts = re.search(r'data-n-a-ts="([^"]+)"', page)
+        if not sg or not ts:
+            return ""
+        inner = json.dumps([
+            "garturlreq",
+            [["X", "X", ["X", "X"], None, [], 1, 1, "US:en", None, 1,
+              None, None, None, None, None, 0, 1],
+             "X", "X", 1, [1, 1, 1], 1, 1, None, 0, 0, None, 0],
+            art_id, int(ts.group(1)), sg.group(1),
+        ])
+        freq = json.dumps([[["Fbv4je", inner, None, "1"]]])
+        data = urllib.parse.urlencode({"f.req": freq}).encode()
+        req = urllib.request.Request(
+            _GNEWS_BATCH, data=data,
+            headers={**headers,
+                     "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8"},
+        )
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            body = resp.read().decode("utf-8", "replace")
+    except (urllib.error.URLError, TimeoutError) as e:
+        print(f"    note url resolve failed ({e})")
+        return ""
+    m = _NOTE_URL_RE.search(body)
+    return m.group(0) if m else ""
+
+
+def fetch_note_trending(keywords: list[str] | None = None, per_keyword: int = 5) -> list[dict]:
     keywords = keywords or ["React", "Next.js", "プログラミング"]
     results: list[dict] = []
     seen: set[str] = set()
     for kw in keywords:
-        url = (
-            "https://note.com/api/v3/searches"
-            f"?context=note&q={urllib.parse.quote(kw)}&size={count}&sort=popular"
-        )
-        # note.com sits behind Cloudflare and rejects datacenter IPs (e.g. GitHub
-        # Actions runners) that send a non-browser User-Agent. Use browser-like
-        # headers so the request is not trivially flagged as a bot.
-        headers = {
-            "User-Agent": (
-                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-                "AppleWebKit/537.36 (KHTML, like Gecko) "
-                "Chrome/124.0.0.0 Safari/537.36"
-            ),
-            "Accept": "application/json",
-            "Accept-Language": "ja,en-US;q=0.9,en;q=0.8",
-            "Referer": "https://note.com/",
-        }
-        req = urllib.request.Request(url, headers=headers)
+        query = urllib.parse.quote(f"site:note.com {kw}")
+        url = f"https://news.google.com/rss/search?q={query}&hl=ja&gl=JP&ceid=JP:ja"
+        req = urllib.request.Request(url, headers={"User-Agent": _BROWSER_UA})
         try:
             with urllib.request.urlopen(req, timeout=30) as resp:
-                data = json.loads(resp.read().decode())
+                xml = resp.read().decode("utf-8", "replace")
         except urllib.error.URLError as e:
             print(f"    skipped '{kw}' ({e})")
             continue
-        notes = (((data.get("data") or {}).get("notes") or {}).get("contents")) or []
-        for n in notes:
-            key = n.get("key", "")
-            urlname = (n.get("user") or {}).get("urlname", "")
-            note_url = f"https://note.com/{urlname}/n/{key}" if urlname and key else ""
-            published_at = (n.get("publish_at") or "")[:10]
-            if not note_url or note_url in seen or published_at < SEVEN_DAYS_AGO:
+        kept = 0
+        for item in re.findall(r"<item>(.*?)</item>", xml, re.S):
+            if kept >= per_keyword:
+                break
+            link_m = re.search(r"<link>(.*?)</link>", item, re.S)
+            title_m = re.search(r"<title>(.*?)</title>", item, re.S)
+            date_m = re.search(r"<pubDate>(.*?)</pubDate>", item, re.S)
+            if not link_m or not title_m:
+                continue
+            # Filter by date BEFORE the (2-request) URL resolve to limit traffic.
+            published_at = ""
+            if date_m:
+                try:
+                    published_at = (
+                        parsedate_to_datetime(date_m.group(1).strip())
+                        .astimezone(JST).strftime("%Y-%m-%d")
+                    )
+                except (TypeError, ValueError):
+                    published_at = ""
+            if not published_at or published_at < SEVEN_DAYS_AGO:
+                continue
+            note_url = _resolve_gnews_url(link_m.group(1).strip())
+            if not note_url or note_url in seen:
                 continue
             seen.add(note_url)
+            title = re.sub(r"\s*-\s*note\s*$", "", title_m.group(1).strip())
             results.append({
-                "title": (n.get("name") or "")[:60],
+                "title": title[:60],
                 "url": note_url,
-                "like_count": n.get("like_count", 0),
                 "published_at": published_at,
                 "keyword": kw,
             })
-    results.sort(key=lambda r: r["like_count"], reverse=True)
+            kept += 1
+    results.sort(key=lambda r: r["published_at"], reverse=True)
     return results
 
 
@@ -288,17 +348,17 @@ def note_note(articles: list[dict]) -> str:
         "tags: [tech-trend, auto-generated]",
         "---",
         "",
-        f"# note 技術記事（人気） - {TODAY}",
+        f"# note 技術記事 - {TODAY}",
         "",
-        "技術キーワードで検索した人気記事。",
+        "Google News 経由で取得した過去 7 日間の note 技術記事。",
         "",
-        "| # | 記事 | ❤️ | キーワード | 公開日 |",
-        "|---:|---|---:|---|---|",
+        "| # | 記事 | キーワード | 公開日 |",
+        "|---:|---|---|---|",
     ]
     for i, a in enumerate(articles, 1):
         title = a["title"].replace("|", "｜")
         lines.append(
-            f"| {i} | [{title}]({a['url']}) | {a['like_count']:,} | {a['keyword']} | {a['published_at']} |"
+            f"| {i} | [{title}]({a['url']}) | {a['keyword']} | {a['published_at']} |"
         )
     lines.append("")
     return "\n".join(lines)
@@ -367,7 +427,7 @@ def daily_note(
         "",
     ]
     for a in note[:5]:
-        lines.append(f"- [{a['title']}]({a['url']}) ❤️{a['like_count']:,}")
+        lines.append(f"- [{a['title']}]({a['url']}) `{a['published_at']}`")
     lines.append("")
     return "\n".join(lines)
 

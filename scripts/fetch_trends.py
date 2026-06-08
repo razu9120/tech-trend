@@ -116,7 +116,20 @@ def fetch_note_trending(keywords: list[str] | None = None, count: int = 10) -> l
             "https://note.com/api/v3/searches"
             f"?context=note&q={urllib.parse.quote(kw)}&size={count}&sort=popular"
         )
-        req = urllib.request.Request(url, headers={"User-Agent": "tech-trend-bot/1.0"})
+        # note.com sits behind Cloudflare and rejects datacenter IPs (e.g. GitHub
+        # Actions runners) that send a non-browser User-Agent. Use browser-like
+        # headers so the request is not trivially flagged as a bot.
+        headers = {
+            "User-Agent": (
+                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/124.0.0.0 Safari/537.36"
+            ),
+            "Accept": "application/json",
+            "Accept-Language": "ja,en-US;q=0.9,en;q=0.8",
+            "Referer": "https://note.com/",
+        }
+        req = urllib.request.Request(url, headers=headers)
         try:
             with urllib.request.urlopen(req, timeout=30) as resp:
                 data = json.loads(resp.read().decode())

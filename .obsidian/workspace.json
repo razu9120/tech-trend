@@ -4,21 +4,21 @@
     "type": "split",
     "children": [
       {
-        "id": "bb1f49b6b361efac",
+        "id": "ff4836647680e5b5",
         "type": "tabs",
         "children": [
           {
-            "id": "89bae70deb06ead0",
+            "id": "481facf317768e24",
             "type": "leaf",
             "state": {
-              "type": "markdown",
+              "type": "split-diff-view",
               "state": {
-                "file": "topics/zenn/2026-06-10.md",
-                "mode": "source",
-                "source": false
+                "aFile": "topics/zenn/2026-06-17.md",
+                "bFile": "topics/zenn/2026-06-17.md",
+                "aRef": ""
               },
-              "icon": "lucide-file",
-              "title": "2026-06-10"
+              "icon": "diff",
+              "title": "Diff: 2026-06-17  (Working Tree)"
             }
           }
         ]
@@ -193,35 +193,35 @@
       "obsidian-git:Open Git source control": false
     }
   },
-  "active": "89bae70deb06ead0",
+  "active": "481facf317768e24",
   "lastOpenFiles": [
-    "topics/zenn/2026-06-09.md",
-    "topics/zenn/2026-06-08.md",
-    "topics/zenn/2026-06-10.md",
-    "topics/qiita/2026-06-10.md",
-    "topics/react/2026-06-10.md",
-    "topics/note/2026-06-10.md",
-    "topics/nextjs/2026-06-10.md",
-    "topics/github-trending/2026-06-10.md",
-    "topics/claude-code/2026-06-10.md",
-    "daily/2026-06-10.md",
-    "topics/note/2026-06-09.md",
-    "topics/qiita/2026-06-09.md",
-    "topics/github-trending/2026-06-09.md",
-    "topics/react/2026-06-09.md",
-    "topics/zenn/2026-06-03.md",
+    "topics/zenn/2026-06-17.md",
+    "topics/qiita/2026-06-16.md",
+    "topics/react/2026-06-17.md",
+    "topics/qiita/2026-06-17.md",
+    "topics/note/2026-06-17.md",
+    "topics/nextjs/2026-06-17.md",
+    "topics/github-trending/2026-06-17.md",
+    "topics/claude-code/2026-06-17.md",
+    "daily/2026-06-17.md",
+    "topics/zenn/2026-06-16.md",
+    "topics/zenn/2026-06-15.md",
+    "daily/2026-06-15.md",
+    "topics/react/2026-06-16.md",
+    "topics/note/2026-06-16.md",
+    "topics/nextjs/2026-06-16.md",
+    "topics/github-trending/2026-06-16.md",
+    "topics/claude-code/2026-06-16.md",
+    "daily/2026-06-16.md",
+    "topics/note/2026-06-14.md",
+    "topics/note/2026-06-15.md",
+    "topics/qiita/2026-06-15.md",
+    "topics/zenn/2026-06-12.md",
+    "topics/zenn/2026-06-14.md",
+    "topics/zenn/2026-06-13.md",
+    "topics/react/2026-06-15.md",
+    "topics/react/2026-06-14.md",
     "scripts/fetch_trends.py.tmp.46903.e854fa282080",
-    "daily/2026-06-03.md",
-    "topics/zenn/2026-06-02.md",
-    "topics/github-trending/2026-06-03.md",
-    "topics/nextjs/2026-06-03.md",
-    "topics/react/2026-06-03.md",
-    "topics/claude-code/2026-06-03.md",
-    "daily/2026-06-02.md",
-    "topics/zenn/2026-06-01.md",
-    "topics/react/2026-06-02.md",
-    "topics/nextjs/2026-06-02.md",
-    "topics/github-trending/2026-06-02.md",
     "topics/zenn",
     "scripts/fetch_trends.py",
     "scripts",
